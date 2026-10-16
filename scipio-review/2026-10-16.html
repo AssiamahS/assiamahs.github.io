@@ -1,0 +1,1154 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Scipio quality-gate review 2026-10-16</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<style>body{margin:16px;font:14px/1.45 -apple-system,Segoe UI,sans-serif;color:#111;background:#fff}pre{white-space:pre-wrap;word-break:break-word}</style></head>
+<body><p>Plain text copy: <a href="2026-10-16.txt">2026-10-16.txt</a> · Markdown: <a href="2026-10-16.md">2026-10-16.md</a></p>
+<pre># Scipio quality-gate review pack — 2026-10-16
+
+Branches `quality-gate` (pushed, unmerged) and `dryrun-boundary` (in progress) on AssiamahS/scipio. main untouched; the slybox runner still runs main.
+
+## 1. Why
+MSK job 1135 (Clinical Research Budget Manager) was submitted 2026-10-09 and rejected 2026-10-16. The JD required 2-4 years in clinical research financial management + Medicare Coverage Analysis. The analyzer extracted zero tier-1 requirements (&#x27;mandatory requirements covered&#x27; passed on an empty list), the LLM match score was the crash fallback 5/10, the ranker marked the job out of lane, and the resume headline printed the posting title under the candidate&#x27;s name over a summary calling him an IT coordinator. 94 sends since 9/24 used 4 fixed summary paragraphs; 70/94 were out of lane; 68/94 carried the warning &#x27;title not one he has held&#x27; and went anyway.
+
+## 2. Commits on quality-gate
+```
+7f8a5b4 feat: qualification gate — a job he is not qualified for does not get a resume
+
+MSK 1135 (Clinical Research Budget Manager, 10/09) went out with zero
+tier-1 requirements extracted, a crash-fallback 5/10 match score and a
+ranker row saying out of lane; &quot;budget&quot;, &quot;clinical&quot; and &quot;compliance&quot; term
+hits counted as evidence for 2-4 years of clinical research finance.
+Rejected in 7 days. Three checks, none enforcing anything.
+
+- specialty.py: &quot;N years in &lt;specialty&gt;&quot; extraction with required vs
+  preferred (heading or qualifier), Workday run-on lists split at
+  Required/Preferred, HTML lists, &quot;two (2) years&quot;, comma/or alternatives,
+  synonyms (helpdesk ~ service desk). Covered only when every word of the
+  specialty is in his approved record AND the roles carrying it add up to
+  the years asked (85% tolerance). Skills-only evidence proves no years.
+- qualification_gate.py: PASS / REVIEW / BLOCK. BLOCK = unmet required
+  specialty, credential, years, senior title, no lane. REVIEW = nothing
+  extracted while the JD names years, years unproven, a title family he
+  has not held with no domain specialty proven, a fallback match score.
+- jd_match carries the specialty rows (tier 1 / tier 3) plus t1_extracted
+  and extraction_suspect; preflight adds the verdict as a check and keeps
+  it on the record, so the submit gate refuses anything but PASS.
+- applier records blocked_qualification / review_required and fails
+  closed on a fallback score before the form; parked digest lists
+  review_required.
+- tailor: no headline under the name (it mirrored the posting title); the
+  summary is composed per job from approved SENTENCES, opener from the
+  job&#x27;s family, body by JD echo, no two saying the same thing; provenance
+  maps each sentence as summary:&lt;id&gt;#&lt;n&gt;. bank.summary_sentences holds
+  the employer-named pre-v3 sentences as approved:false drafts.
+- replay_gate.py replays the gate over applications/: of the 84 sends
+  since 9/24 -&gt; 42 pass, 27 block, 15 review; MSK blocks, CHOP #1510 and
+  the coordinator jobs pass.
+- catalog GATE-008/009 (P0), RES-007 (P0), RES-008; 53/53 pass.
+
+2bdcbcc fix: scoring fallback, receipt matching, pacing and slice cadence from the 10/15 wakes
+
+Everything the first two slybox wakes showed that was not the gate itself.
+
+- ai_engine: a provider handing back null content raised AttributeError out
+  of score_job_match; _complete now walks anthropic -&gt; openrouter -&gt; github
+  and names every failure, and the 5/10 stub carries fallback:true so a
+  caller can tell it from a real 5
+- salary_policy: &quot;$83,800.00 - $134,000.00&quot; did not parse (cents), so MSK
+  got an $80k ask under an $83.8k floor; band parses with cents and the
+  posting band is read before the market guess
+- mailer: a folded subject line killed rejection_reply with &quot;Header values
+  may not contain linefeed&quot;; header_value() collapses CR/LF/tab runs
+- rejections: a receipt binds to the row whose title it names, else the
+  submit closest to the mail date, never a blocked row; the 10/15 CHOP
+  receipt moves from #1144 to #1510 and #1144 goes back to wishlist
+- process_queue: the wake row is rewritten after an after-sweep, so
+  scout_ran stops reading false when the scout actually ran
+- applier tracker: an ATS/submit gate block is blocked_gate, not
+  &quot;bad_url (no form on page)&quot;
+- pacing: wait only against the same board host; different hosts get
+  5-20 s of jitter (waits were 19-32 min of each 55-min slot)
+- cloud_runner: a slice that overruns the next :02 starts the following
+  one 60 s later instead of skipping an hour (3 slices/day -&gt; 8); the
+  arithmetic lives in next_slice_epoch, sourceable with --lib for tests
+
+```
+
+### Diff stat vs main
+```
+ NOTES.md                                   |    2 +
+ auto-apply/ai_engine.py                    |  131 ++-
+ auto-apply/applier.py                      |   36 +-
+ auto-apply/bank.json                       |  191 ++++-
+ auto-apply/confirmations.json              |    2 +-
+ auto-apply/failure_catalog.json            | 1289 ++++++++++++++++------------
+ auto-apply/failure_status.json             |   88 +-
+ auto-apply/failure_tests.py                |   67 ++
+ auto-apply/jd_match.py                     |   12 +
+ auto-apply/mailer.py                       |   16 +-
+ auto-apply/pacing.py                       |   66 +-
+ auto-apply/parked.py                       |    1 +
+ auto-apply/preflight.py                    |   14 +-
+ auto-apply/process_queue.py                |   23 +-
+ auto-apply/provenance.py                   |   20 +
+ auto-apply/qualification_gate.py           |   84 ++
+ auto-apply/rejections.py                   |   99 ++-
+ auto-apply/replay_gate.py                  |  100 +++
+ auto-apply/salary_policy.py                |   10 +-
+ auto-apply/specialty.py                    |  277 ++++++
+ auto-apply/tailor.py                       |  175 ++--
+ auto-apply/test_pacing.py                  |   98 +++
+ auto-apply/test_process_queue.py           |   32 +
+ auto-apply/test_qualification_gate.py      |  122 +++
+ auto-apply/test_receipt_match.py           |   93 ++
+ auto-apply/test_resume_headline_summary.py |  107 ++-
+ auto-apply/test_runner_cadence.py          |  102 +++
+ auto-apply/test_salary_policy.py           |   13 +
+ cloud_runner.sh                            |   54 +-
+ jobs.json                                  |    8 +-
+ tracker.html                               |    2 +
+ 31 files changed, 2589 insertions(+), 745 deletions(-)
+```
+
+## 3. Replay of the revised gate over the 84 applications that actually went out (replay_gate.py --sent)
+
+| id | company | role | happened | verdict | T1 extracted | specialty requirements (years asked / evidenced) | reasons |
+|---|---|---|---|---|---|---|---|
+| 332 | agency | SWE Infrastructure Specialist (JS/TS/Python) – Freelance AI  | submit_unconfirmed | PASS | no |  |  |
+| 343 | radixexperienced | HPC Systems Engineer | submit_unconfirmed | BLOCK | yes | 5+ years in hpc system administration/architecture [NO 0.0y] | 5+ years in hpc system administration/architecture: no evidence of: hpc |
+| 385 | healthverity | Desktop Support Engineer  | submit_unconfirmed | BLOCK | yes | 10+ years in hands-on desktop/endpoint support [NO 2.4y] | 10+ years in hands-on desktop/endpoint support: 2.4 years across hmh &lt; 10 asked |
+| 408 | pathward | Balance Sheet Strategy Analyst | submit_unconfirmed | PASS | no |  |  |
+| 413 | agency | SWE Infrastructure Specialist (Java) – Freelance AI Trainer  | submit_unconfirmed | PASS | no |  |  |
+| 428 | voxmedia | Network &amp; Systems Engineer | submit_unconfirmed | BLOCK | yes | 6+ years in network engineering and infrastructure engineering [NO 0.0y] | 6+ years in network engineering and infrastructure engineering: no evidence of: engineering, engineering |
+| 442 | adyen | Strategy &amp; Program Manager | submit_unconfirmed | PASS | yes | 5+ years in combination of a client-facing, technical operations, or strategy/business operations ro [ok 5.4y] |  |
+| 468 | figma | Support Engineer, AI Infrastructure &amp; Tooling | submit_unconfirmed | BLOCK | yes | 3+ years in experience shipping integrations, automations, or internal tools across customer-facing op [NO 0.0y] | 3+ years in experience shipping integrations, automations, or internal tools across customer-facing op: no evidence of: shipping, integrations |
+| 471 | turing | Technical Business Analyst | submit_unconfirmed | BLOCK | yes | 8+ years in business analyst, functional analyst, or technical ba delivering enterprise software solut [NO 0.7y] | 8+ years in business analyst, functional analyst, or technical ba delivering enterprise software solut: 0.7 years across ss &lt; 8 asked |
+| 480 | squad | Systems Engineer | submit_unconfirmed | PASS | no |  |  |
+| 483 | aspenviewtech | Data Analyst (Slovak)  | submit_unconfirmed | PASS | no |  |  |
+| 486 | mixpanel | Marketing Systems Engineer | submit_unconfirmed | BLOCK | yes | 2+ years in full-stack engineering [NO 0.0y] | 2+ years in full-stack engineering: no evidence of: full-stack, engineering |
+| 499 | talkspace | Network Strategic Operations Coordinator | submit_unconfirmed | PASS | yes | 2+ years in operations, project coordination, project management, healthcare operations, or related ex [ok 4.4y] |  |
+| 522 | expel | Systems Engineer | submitted | PASS | yes |  |  |
+| 529 | carrotfertility | Business Intelligence Analyst | submit_unconfirmed | PASS | no |  |  |
+| 534 | rebuildmanufacturing | Systems Engineer - CAD | submit_unconfirmed | BLOCK | yes | 5+ years in experience designing, implementing, managing, and supporting enterprise cad, pdm, and plm [ok 6.3y]; 5+ years in demonstrated engineering it support [NO 0.0y] | 5+ years in demonstrated engineering it support: no evidence of: engineering |
+| 572 | point72 | It Operations Engineer, Trading Application Support | submitted | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;30 years&quot; and no years requirement was extracted |
+| 603 | point72 | Service Desk Engineer, Technology | submitted | BLOCK | yes | 3+ years in experience providing technical support in remote, high‑volume environments [NO 0.0y] | 3+ years in experience providing technical support in remote, high‑volume environments: no evidence of: providing, remote |
+| 628 | anthropic | IT Operations Engineer, Asset Management | submitted | PASS | no |  |  |
+| 631 | blinkhealth | TA Operations Coordinator (Contract) | submit_unconfirmed | BLOCK | yes | 3+ years in recruiting coordinator or in a similar talent operations-adjacent role [NO 0.0y] | 3+ years in recruiting coordinator or in a similar talent operations-adjacent role: no evidence of: recruiting |
+| 632 | cloverhealth | Implementation Manager | submitted | REVIEW | yes | 5+ years in technical product implementations in a customer-facing role, with a strong track record of [NO Noney]; 2+ years in healthcare technology implementations working with provider practices, ideally [NO 0.0y] | 5+ years in technical product implementations in a customer-facing role, with a strong track record of: named in skills only — no role shows the years; implementation title is not a family he has held and the JD names no implementation specialty his record proves |
+| 637 | codepath | Engineering Project Manager | submit_unconfirmed | PASS | no | 4+ years in project management, delivery, or qa role, ideally on a small engineering team [ok 4.4y] |  |
+| 639 | urbancompass | Data Analyst  | submit_unconfirmed | PASS | no |  |  |
+| 640 | schonfeld | Market Data Analyst | submitted | BLOCK | yes | 5+ years in market data, data operations, or a related role at a hedge fund, asset manager, or financi [NO 2.4y] | 5+ years in market data, data operations, or a related role at a hedge fund, asset manager, or financi: 2.4 years across hmh &lt; 5 asked |
+| 641 | openloophealth | Project Manager | submit_unconfirmed | PASS | yes | 3+ years in project management [ok 4.4y] |  |
+| 646 | hightouch | Technical Account Manager, Enterprise (East) | submit_unconfirmed | BLOCK | yes | 5+ years in client facing and / or technology focused role [NO 0.0y] | 5+ years in client facing and / or technology focused role: no evidence of: focused |
+| 652 | gleanwork | Designated Technical Support Engineer - Central/East | submit_unconfirmed | PASS | no |  |  |
+| 654 | towerresearchcapital | Data Analyst | submit_unconfirmed | BLOCK | yes | 25+ years in innovation and a reputation for discovering unique market opportunities [NO 0.0y] | 25+ years in innovation and a reputation for discovering unique market opportunities: no evidence of: innovation, reputation, discovering, unique, opportunities |
+| 655 | oklo | Deployment Project Manager | submit_unconfirmed | PASS | yes | 5+ years in project management [ok 4.4y] |  |
+| 656 | drweng | Data Analyst, Stewardship | submitted | PASS | no |  |  |
+| 658 | lts | Program Manager | submit_unconfirmed | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;15 years&quot; and no years requirement was extracted |
+| 664 | beyondtrust | Technical Support Engineer | submit_unconfirmed | REVIEW | yes | 5+ years in enterprise software customer support and/or it-related support [NO Noney] | 5+ years in enterprise software customer support and/or it-related support: named in skills only — no role shows the years |
+| 667 | pearl | Quality Management Systems Specialist  | submit_unconfirmed | PASS | yes | 5+ years in qms [NO 0.0y] |  |
+| 680 | cssmerge | Construction Project Manager EV/AV | submit_unconfirmed | BLOCK | yes | 4+ years in commercial charging infrastructure projects [NO 0.0y] | title is in no lane the engine applies to; 4+ years in commercial charging infrastructure projects: no evidence of: commercial, charging |
+| 688 | oklo | Technical Program Manager | submit_unconfirmed | PASS | yes | 3+ years in technical project or program management, national laboratory engagement, government contra [ok 4.4y] |  |
+| 700 | axon | IT Support Technician V | submitted | BLOCK | yes | 5+ years in it support or end-user computing [NO 0.0y] | 5+ years in it support or end-user computing: no evidence of: computing |
+| 718 | tines | GTM Systems Specialist  | submitted | BLOCK | yes | 3+ years in gtm systems, business systems analysis, revenue systems, or sales operations in a b2b saas [NO 0.7y] | 3+ years in gtm systems, business systems analysis, revenue systems, or sales operations in a b2b saas: 0.7 years across ss &lt; 3 asked |
+| 731 | alphasense | Cloud Support Engineer | submit_unconfirmed | PASS | yes | 2+ years in technical support, it operations, cloud operations or a related field [ok 2.4y] |  |
+| 738 | capco | LoanIQ Business Analyst   | submit_unconfirmed | PASS | no |  |  |
+| 741 | bluewaterthinking | Program Manager - Healthcare Transformation | submitted | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;10 years&quot; and no years requirement was extracted |
+| 749 | aclu | Service Desk Technician II | submitted | PASS | no |  |  |
+| 750 | singlestore | Support Engineer | submit_unconfirmed | REVIEW | yes | 4+ years in advanced customer-facing technical support [NO Noney] | 4+ years in advanced customer-facing technical support: named in skills only — no role shows the years |
+| 780 | nebius | Critical Infrastructure Engineer | submit_unconfirmed | PASS | no |  |  |
+| 792 | cresta | Application Support Engineer | submitted | BLOCK | yes | 4+ years in technical support, helpdesk, or customer-facing engineering role [NO 2.4y] | 4+ years in technical support, helpdesk, or customer-facing engineering role: 2.4 years across hmh &lt; 4 asked |
+| 802 | yugabyte | Technical Support Engineer  | submit_unconfirmed | PASS | no |  |  |
+| 846 | chainguard | Finance Systems Administrator  | submitted | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;10 years&quot; and no years requirement was extracted |
+| 868 | cssmerge | Installation Project Manager | submitted | PASS | no |  |  |
+| 884 | coherehealth | Healthcare Analyst II | submit_unconfirmed | BLOCK | yes | 1+ years in and/or maintaining dashboards and self-service business intelligence tools [NO 0.0y]; 2+ years in analyst role [NO 0.7y] | 1+ years in and/or maintaining dashboards and self-service business intelligence tools: no evidence of: self-service, intelligence, tools; 2+ years in analyst role: 0.7 years across ss &lt; 2 asked |
+| 913 | holderconstruction | Construction Project Manager | submit_unconfirmed | BLOCK | yes | 3+ years in relevant construction [NO 0.0y] | title is in no lane the engine applies to; 3+ years in relevant construction: no evidence of: construction |
+| 916 | censys | Systems Engineer | submitted | REVIEW | yes | 6+ years in security data pipelines, detection engineering systems, or threat intelligence platforms [NO Noney] | 6+ years in security data pipelines, detection engineering systems, or threat intelligence platforms: named in skills only — no role shows the years |
+| 918 | zscaler | Technical Support Engineer | submit_unconfirmed | BLOCK | yes | 3+ years in experience troubleshooting ssl, saml, http, and tcp/ip, with extensive [NO 0.0y] | 3+ years in experience troubleshooting ssl, saml, http, and tcp/ip, with extensive: no evidence of: ssl |
+| 937 | axonius | Technical Support Engineer (SkillBridge: On-the-job training | submitted | PASS | no |  |  |
+| 940 | sardine | Support Engineer  | submit_unconfirmed | PASS | no | 5+ years in technical support, support engineering, solutions engineering, or software engineering r [NO 2.4y] |  |
+| 944 | talkspace | Data Analyst | submitted | PASS | no | 3+ years in analytical role [NO 0.0y] |  |
+| 959 | axogen | Clinical Research Associate II | submit_unconfirmed | BLOCK | yes | 3+ years in clinical research associate [NO 0.0y] | 3+ years in clinical research associate: no evidence of: research |
+| 970 | anthropic | Technical Program Manager, Life Sciences | submitted | PASS | no |  |  |
+| 973 | parachutehealth | Implementation Manager  | submit_unconfirmed | BLOCK | yes | 3+ years in consulting, digital transformation, or project-based work in healthcare or health tech [NO 2.4y] | 3+ years in consulting, digital transformation, or project-based work in healthcare or health tech: 2.4 years across hmh &lt; 3 asked |
+| 989 | storyblok | Technical Support Engineer II - Costa Rica, Colombia, Mexico | submit_unconfirmed | BLOCK | yes | 3+ years in support engineering, software engineering [NO 0.0y] | 3+ years in support engineering, software engineering: no evidence of: engineering |
+| 1003 | revolutionmedicines | Clinical Trials Manager | submit_unconfirmed | REVIEW | yes | 5+ years in clinical operations [NO Noney] | 5+ years in clinical operations: named in skills only — no role shows the years; clinical_ops title is not a family he has held and the JD names no clinical_ops specialty his record proves |
+| 1006 | customerio | Contract IT Specialist | submit_unconfirmed | PASS | no | 3+ years in it support, systems administration, or it operations, ideally at a remote-first saas compa [NO 2.4y] |  |
+| 1007 | relationalai | Customer Support Engineer  | submitted | BLOCK | yes | 5+ years in customer-facing support role [NO 2.4y] | 5+ years in customer-facing support role: 2.4 years across hmh &lt; 5 asked |
+| 1041 | charliehealth | Growth Strategy Analyst, GTM Data | submit_unconfirmed | PASS | yes |  |  |
+| 1042 | charliehealth | Growth Strategy Analyst, Performance &amp; Comp | submit_unconfirmed | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;2 years&quot; and no years requirement was extracted |
+| 1057 | xai | IAM Engineer | submit_unconfirmed | REVIEW | yes | 3+ years in identity and access management [NO Noney] | 3+ years in identity and access management: named in skills only — no role shows the years; iam title is not a family he has held and the JD names no iam specialty his record proves |
+| 1068 | gitlab | Support Engineer, U.S. Government Support  | submit_unconfirmed | PASS | no |  |  |
+| 1083 | globalhealthcareexchangeinc | Delivery Manager II | submit_unconfirmed | PASS | yes | 2+ years in relatable healthcare or account management [ok 3.5y] |  |
+| 1093 | point72 | Technical Business Analyst | submit_unconfirmed | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;30 years&quot; and no years requirement was extracted |
+| 1098 | msd | Clinical Research Associate (CRA) - Immunology (Remote) | submit_unconfirmed | REVIEW | yes | 2+ years in direct site management [ok 2.4y]; 5+ years in healthcare field [ok 4.3y] | clinical_ops title is not a family he has held and the JD names no clinical_ops specialty his record proves |
+| 1127 | bmc | Program Coordinator | submit_unconfirmed | PASS | no |  |  |
+| 1135 | msk | Clinical Research Budget Manager, Office of Research and Pro | submit_unconfirmed | BLOCK | yes | 2+ years in clinical research financial management [NO 0.0y] | 2+ years in clinical research financial management: no evidence of: research |
+| 1158 | chop | Marketing/PR Project Coordinator | submit_unconfirmed | REVIEW | no |  | no mandatory requirement extracted: JD says &quot;(3) years&quot; and no years requirement was extracted |
+| 1170 | oddball | Program Manager | submitted | PASS | no |  |  |
+| 1176 | jci | Project Coordinator | submitted | PASS | no |  |  |
+| 1187 | doximity | Business Intelligence Analyst (Contractor) | submit_unconfirmed | BLOCK | yes | 3+ years in experience illustrating collaboration, passion for data, reliability, precision, curiosity [NO 0.0y] | 3+ years in experience illustrating collaboration, passion for data, reliability, precision, curiosity: no evidence of: illustrating, collaboration |
+| 1242 | jci | Fire Project Manager | submit_unconfirmed | PASS | yes | 5+ years in project management [ok 4.4y] |  |
+| 1243 | jci | Fire Detection Systems Project Manager | submit_unconfirmed | PASS | yes | 5+ years in project management [ok 4.4y] |  |
+| 1277 | coherehealth | Pricing Analyst | submit_unconfirmed | BLOCK | yes | 5+ years in pricing, commercial finance, or fp&amp;a [NO 0.7y] | 5+ years in pricing, commercial finance, or fp&amp;a: 0.7 years across ss &lt; 5 asked |
+| 1279 | philips | Project Manager, Radiology Product Deployment (Remote based) | submitted | PASS | yes | 2+ years in projects within the healthcare space, preferably with the vue pacs product [ok 3.5y]; 5+ years in specific project or program management [ok 4.4y] |  |
+| 1291 | pelago | Clinical Quality Program Manager | submit_unconfirmed | BLOCK | yes | 3+ years in clinical quality, compliance, or auditing [NO 1.6y] | 3+ years in clinical quality, compliance, or auditing: 1.6 years across hb, ss &lt; 3 asked |
+| 1301 | bmc | Applications Analyst II - Epic Beaker AP | submitted | PASS | yes |  |  |
+| 1352 | philips | IT Service Desk Analyst I | submitted | PASS | yes | 1+ years in it helpdesk, technical product support or relevant it customer service-related roles [ok 2.4y] |  |
+| 1459 | msk | Clinical Research Coordinator | submit_unconfirmed | REVIEW | yes |  | clinical_ops title is not a family he has held and the JD names no clinical_ops specialty his record proves |
+| 1469 | globalhealthcareexchangeinc | Delivery Manager II - EMS | submit_unconfirmed | PASS | yes | 2+ years in relatable healthcare [ok 4.3y] |  |
+| 1510 | chop | Program Coordinator I - Neuro-oncology | submitted | PASS | yes | 1+ years in administration, coordination or program [ok 4.4y]; 1+ years in healthcare related environment [ok 4.3y]; 1+ years in leadership, management, or supervisory [ok 6.3y] |  |
+
+Totals: {&quot;PASS&quot;: 42, &quot;BLOCK&quot;: 27, &quot;REVIEW&quot;: 15}
+
+## 4. Failure catalog run (53 rows)
+```
+  [!] match scoring failed (empty reply from every provider) — using fallback 5/10
+  ok   FORM-001  P0 Sponsorship question answered Yes (Scale AI 9/13, 4 July forms)
+  ok   FORM-002  P0 Visa/citizenship wording the engine does not understand gets a guess
+  ok   FORM-003  P0 &#x27;Have you ever worked for X&#x27; answered blind
+  ok   FORM-004  P1 Demographic self-ID picked blind
+  ok   FORM-005  P0 Degree / certification claimed that he does not hold (Blue Water Maste
+  ok   FORM-006  P0 Years of experience overclaimed (hand-typed 7 / 4.5)
+  ok   FORM-007  P0 Legal/background/conflict questions answered blind (&#x27;fugitive from jus
+  ok   FORM-008  P1 Language / age / military / license answered blind
+  ok   FORM-010  P0 Blind &#x27;(first option)&#x27; fallback on 99 answers / 56 forms
+  ok   FORM-011  P0 Salary 60000 / 29 typed, a number into a yes/no band question
+  ok   FORM-012  P0 Learned answer overrides &#x27;Do you meet ALL requirements&#x27; honesty
+  ok   GATE-001  P1 Foreign-language posting applied to (&#x27;Data Analyst (Slovak)&#x27;)
+  ok   GATE-002  P1 Construction / trades PM applied to
+  ok   GATE-003  P1 Same company flooded (Oscar 15, Connections 14, Komodo 11)
+  ok   GATE-004  P1 Failing URL re-filled every wake (4-6x in 3 days)
+  ok   GATE-005  P1 Infra title got the Finance &#x27;pricing analyst&#x27; summary (Anthropic)
+  ok   GATE-006  P1 Lane policy drifts from interview data (9/28 two-lane rule blocked fin
+  ok   GATE-007  P1 Postings under his 80k floor queued
+  ok   MAIL-001  P0 Receipt counted as an interview (Billtrust, 15 days of digests)
+  ok   RES-001   P0 Resume described the apply bot (74 of 92 sent Sep 1-14)
+  ok   RES-002   P0 One claim printed twice
+  ok   RES-003   P0 Unsubstantiated figures (40% scan, 18% rollout) on the resume
+  ok   RES-004   P1 Base variant breaks RESUME_RULES / spills to page 2
+  ok   RES-005   P0 Titles/dates differ from the locked timeline
+  ok   STATE-001 P1 Two writers raced generated state (rebase stopped mid-way)
+  ok   FORM-013  P0 A historical wrong answer (salary, knockout, blind pick) would be give
+  ok   FORM-014  P0 Two answer rules disagree on a critical fact (legacy table said Yes to
+  ok   FORM-015  P0 Required question submitted with a guessed answer when no fact exists
+  ok   FORM-016  P1 Free-text &#x27;which company do you work for&#x27; answered Yes/No
+  ok   FORM-017  P0 A new wording of a knockout question (sponsorship, authorization, hist
+  ok   FORM-018  P0 Years question about a named skill answered from his general/PM timeli
+  ok   FORM-019  P0 &#x27;Yes, I am authorized to work&#x27; treated as an H-1B / sponsorship claim 
+  ok   RES-006   P0 A resume the grader scored weak (ATS &lt; 70) was uploaded (talkspace Dat
+  ok   FORM-021  P1 Workday My Experience required education From / To (Actual or Expected
+  ok   FORM-022  P1 Confirmed-fact questions left blank stalled Application Questions (Str
+  ok   FORM-023  P1 Greenhouse education block left required School / Degree / Discipline 
+  ok   SCHED-001 P1 Every wake since 10/10 re-ran the 70-82 min discovery+scout sweep: the
+  ok   FORM-025  P1 Workday checkbox list &#x27;Do you intend to work remotely from any of the 
+  ok   SCHED-002 P0 The first slybox wake (10/15 12:02Z) and the 13:02Z slice never ran: a
+  ok   EVID-001  P1 An apply_log row could not say which wake or revision produced it, how
+  ok   CONF-001  P0 A row could be logged &#x27;submitted&#x27; without a real acknowledgement: &#x27;con
+  ok   CONF-002  P1 An application receipt was keyed to the wrong job: &#x27;Thank you for appl
+  ok   FORM-026  P0 Greenhouse repair ticked EVERY checkbox the group&#x27;s error flagged on s
+  ok   FORM-024  P0 A years question with no &#x27;experience with X&#x27; phrase was treated as gen
+  ok   MATCH-001 P1 LLM match scoring crashed with &#x27;NoneType&#x27; object has no attribute &#x27;str
+  ok   FORM-027  P1 MSK 1135 posted &#x27;Pay Range: $83,800.00 - $134,000.00&#x27; and the form was
+  ok   MAIL-002  P1 A rejection subject with a folded newline raised ValueError &#x27;Header va
+  ok   SCHED-003 P1 The hourly slice loop skipped every other hour: cloud_runner.sh re-tri
+  ok   PACE-001  P1 Pacing waits ate the applier budget: 7 waits of 2.5-7 min totalled 31m
+  ok   GATE-008  P0 MSK 1135 Clinical Research Budget Manager was submitted: the JD requir
+  ok   GATE-009  P0 Uncertainty became permission: an empty tier-1 list passed as &#x27;all cov
+  ok   RES-007   P0 The line under his name carried the posting&#x27;s title or the lane&#x27;s targ
+  ok   RES-008   P1 94 applications since 9/24 opened with one of four fixed summary parag
+
+failure catalog: 53/53 pass, 0 P0 regressed, 0 other
+```
+
+## 5. Dry run 1 — MSK 1135 and BMC 1137, first attempt (caught a NameError in the headline removal; fixed)
+```
+=== DRY RUN 1: MSK 1135 (expect blocked_qualification) 05:41:34
+  [*] JD prefetched for tailoring (4912 chars)
+  [*] Job identity: Memorial Sloan Kettering Cancer Center — Clinical Research Budget Manager, Office of Research and Project Administration
+  [*] Salary answer for this posting: 108,900 / $83,800 - $134,000 (posting)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SCIPIO APPLICATION REVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company:   Memorial Sloan Kettering Cancer Center
+Role:      Clinical Research Budget Manager, Office of Research and Project Administration
+URL:       https://msk.wd108.myworkdayjobs.com/MSKCC_Careers_Primary/job/New-York-NY/Clinical-Research-Budget-Manager--Office-of-Research-and-Project-Administration_101515
+
+WHY THIS JOB?
+  Project Management + Timelines + Clinical Workflows + Cross-functional + Vendor Management + Communication
+
+RESUME:    Healthcare family
+JD MATCH:  76% weighted coverage, 56% keyword echo
+EVIDENCE:  15/19 requirements (T1 0/1, T2 14/17)
+CONFIDENCE: 76/100
+
+  ✗ T1 2+ years in clinical research financial management
+  ✓ T2 budget  ← bullet:con-14k
+  ✓ T2 clinical  ← bullet:hmh-devices-18
+  ✓ T2 compliance  ← bullet:con-mlr-30
+  ✓ T2 cross-functional  ← bullet:con-4accounts
+  ✓ T2 documentation  ← bullet:ss-feedback
+  ✓ T2 excel  ← bullet:con-cosentyx
+  ✓ T2 manager  ← bullet:hb-status-qa
+  ✓ T2 operations  ← skill:Healthcare:pharma marketing operations
+  ✓ T2 patient  ← bullet:hmh-scan-40
+  ✓ T2 phi  ← skill:Healthcare:HIPAA/PHI compliance
+  ✓ T2 project  ← bullet:con-4accounts
+  ✓ T2 reporting  ← bullet:cat-ehr
+  ✓ T2 sla  ← skill:IT &amp; Operations:SLA management
+
+CONCERNS
+  ⚠ title not one he has held
+
+PREFLIGHT
+  ✓ candidate identity
+  ✓ company and role present
+  ✓ JD analyzed
+  ✓ resume family selected before tailoring
+  ✓ resume artifact present (md + pdf)
+  ✓ evidence mapped (every line has an approved record)
+  ✓ render fidelity (PDF carries every bullet)
+  ✓ no Scipio / automation / ATS language
+  ✓ recruiter test (reads as a normal, truthful resume)
+  ✓ truth (locked roles: employer, title, dates; no parked role)
+  ✓ RESUME_RULES
+  ✓ no claim appears twice (summary + bullets)
+  ✗ mandatory requirements covered  — [&#x27;2+ years in clinical research financial management&#x27;]
+  ✓ no unsupported skill claims
+  ✗ qualified by the JD&#x27;s own requirements (lane, specialty, years, credentials)  — BLOCK: 2+ years in clinical research financial management: no evidence
+  ✓ seniority eligible
+  ✓ location eligible
+  ✓ mandatory qualifications eligible
+  ✓ salary policy
+  ✓ lane eligible
+  ✗ not a duplicate submit  — [&#x27;DUP_URL_SUBMITTED&#x27;]
+  ✓ ATS / application path supported
+
+STATUS: BLOCKED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [X] QUALIFICATION BLOCK: 2+ years in clinical research financial management: no evidence of: research
+  [X] blocked_qualification: qualification BLOCK: 2+ years in clinical research financial management: no evidence of: research
+rc=0
+=== DRY RUN 2: bmc 1137 Project Coordinator (expect PASS -&gt; dry_run, no submit) 05:41:38
+  [*] JD prefetched for tailoring (7275 chars)
+  [*] Job identity: BMC Company 100 — Project Coordinator
+  [*] Salary answer for this posting: 85,000 / $81,000 - $95,000 (market)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SCIPIO APPLICATION REVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company:   BMC Company 100
+Role:      Project Coordinator
+URL:       https://bmc.wd1.myworkdayjobs.com/BMC/job/Boston/Project-Coordinator_50417
+
+WHY THIS JOB?
+  Project Management + Timelines + Clinical Workflows + Pharmacy + Cross-functional + Stakeholder Management
+
+RESUME:    Healthcare family
+JD MATCH:  77% weighted coverage, 69% keyword echo
+EVIDENCE:  12/15 requirements (T1 1/2, T2 10/12)
+CONFIDENCE: 77/100
+
+  ✓ T1 2+ years experience  ← profile:years_experience=6
+  ✗ T1 2+ years in relevant post-collegiate professional
+  ✓ T2 clinical  ← bullet:hmh-devices-18
+  ✓ T2 compliance  ← bullet:con-mlr-30
+  ✓ T2 coordinator  ← summary:sum-coord
+  ✓ T2 excel  ← bullet:con-cosentyx
+  ✓ T2 hospital  ← bullet:hmh-devices-18
+  ✓ T2 patient  ← bullet:hmh-scan-40
+  ✓ T2 pharmacy  ← bullet:con-8campaigns
+  ✓ T2 phi  ← skill:Healthcare:HIPAA/PHI compliance
+  ✓ T2 process improvement  ← bullet:con-14k
+  ✓ T2 project  ← bullet:con-4accounts
+  ✗ T2 audit
+  ✗ T2 monitoring
+
+PREFLIGHT
+  ✓ candidate identity
+  ✓ company and role present
+  ✓ JD analyzed
+  ✓ resume family selected before tailoring
+  ✓ resume artifact present (md + pdf)
+  ✓ evidence mapped (every line has an approved record)
+  ✓ render fidelity (PDF carries every bullet)
+  ✓ no Scipio / automation / ATS language
+  ✓ recruiter test (reads as a normal, truthful resume)
+  ✓ truth (locked roles: employer, title, dates; no parked role)
+  ✓ RESUME_RULES
+  ✓ no claim appears twice (summary + bullets)
+  ✗ mandatory requirements covered  — [&#x27;2+ years in relevant post-collegiate professional&#x27;]
+  ✓ no unsupported skill claims
+  ✗ qualified by the JD&#x27;s own requirements (lane, specialty, years, credentials)  — BLOCK: 2+ years in relevant post-collegiate professional: no evidence 
+  ✓ seniority eligible
+  ✓ location eligible
+  ✓ mandatory qualifications eligible
+  ✓ salary policy
+  ✓ lane eligible
+  ✓ not a duplicate submit
+  ✓ ATS / application path supported
+
+STATUS: BLOCKED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [X] QUALIFICATION BLOCK: 2+ years in relevant post-collegiate professional: no evidence of: post-collegiate
+  [X] blocked_qualification: qualification BLOCK: 2+ years in relevant post-collegiate professional: no evidence of: post-collegiate
+rc=0
+=== done 05:41:43
+```
+
+## 6. Dry run 2 — BMC 1137 Project Coordinator after the fix (gate PASS, preflight PASS, real match 7/10, Workday sign-in failed, password reset clicked, no form filled, nothing submitted). This is the run that sent the BostonMedicalCenter &#x27;Reset your password&#x27; email at 1:44 AM.
+```
+=== DRY RUN 2b: bmc 1137 Project Coordinator 05:42:25
+  [*] JD prefetched for tailoring (7275 chars)
+  [*] Job identity: BMC Company 100 — Project Coordinator
+  [*] Salary answer for this posting: 85,000 / $81,000 - $95,000 (market)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SCIPIO APPLICATION REVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company:   BMC Company 100
+Role:      Project Coordinator
+URL:       https://bmc.wd1.myworkdayjobs.com/BMC/job/Boston/Project-Coordinator_50417
+
+WHY THIS JOB?
+  Project Management + Timelines + Clinical Workflows + Pharmacy + Cross-functional + Stakeholder Management
+
+RESUME:    Healthcare family
+JD MATCH:  85% weighted coverage, 69% keyword echo
+EVIDENCE:  12/14 requirements (T1 1/1, T2 10/12)
+CONFIDENCE: 85/100
+
+  ✓ T1 2+ years experience  ← profile:years_experience=6
+  ✓ T2 clinical  ← bullet:hmh-devices-18
+  ✓ T2 compliance  ← bullet:con-mlr-30
+  ✓ T2 coordinator  ← summary:sum-coord
+  ✓ T2 excel  ← bullet:con-cosentyx
+  ✓ T2 hospital  ← bullet:hmh-devices-18
+  ✓ T2 patient  ← bullet:hmh-scan-40
+  ✓ T2 pharmacy  ← bullet:con-8campaigns
+  ✓ T2 phi  ← skill:Healthcare:HIPAA/PHI compliance
+  ✓ T2 process improvement  ← bullet:con-14k
+  ✓ T2 project  ← bullet:con-4accounts
+  ✗ T2 audit
+  ✗ T2 monitoring
+  ✓ T4 communication  ← bullet:alt-19k
+
+PREFLIGHT
+  ✓ candidate identity
+  ✓ company and role present
+  ✓ JD analyzed
+  ✓ resume family selected before tailoring
+  ✓ resume artifact present (md + pdf)
+  ✓ evidence mapped (every line has an approved record)
+  ✓ render fidelity (PDF carries every bullet)
+  ✓ no Scipio / automation / ATS language
+  ✓ recruiter test (reads as a normal, truthful resume)
+  ✓ truth (locked roles: employer, title, dates; no parked role)
+  ✓ RESUME_RULES
+  ✓ no claim appears twice (summary + bullets)
+  ✓ mandatory requirements covered
+  ✓ no unsupported skill claims
+  ✓ qualified by the JD&#x27;s own requirements (lane, specialty, years, credentials)
+  ✓ seniority eligible
+  ✓ location eligible
+  ✓ mandatory qualifications eligible
+  ✓ salary policy
+  ✓ lane eligible
+  ✓ not a duplicate submit
+  ✓ ATS / application path supported
+
+STATUS: READY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [*] Resume TAILORED + PREFLIGHT PASSED: BMC_Company_100_adhoc.pdf sha256 d2bea30e7560 (coverage 85%, confidence 85)
+  [*] Navigating to https://bmc.wd1.myworkdayjobs.com/BMC/job/Boston/Project-Coordinator_50417
+  [*] Detected ATS: workday
+  [*] Match score: 7/10 — Strong project coordination, stakeholder communication, and data management skills fit the role, though direct patient‑care coordination experience is limited.
+  [*] ATS keyword coverage: 62% (missing: monitoring, audit, patient, process improvement, communication)
+  [*] Workday flow
+  [~] create did not advance (no error text); trying sign-in
+  [~] password rejected: resetting via email
+  [~] no GMAIL_APP_PASSWORD: cannot read the inbox for the Workday link
+  [wd:account_failed] 8 controls
+        utilityButtonBar &lt;DIV type= id=&gt;  | 
+        hammyMenuIcon &lt;BUTTON type= id=hammyMenuIcon&gt; main menu | 
+        formField-email &lt;DIV type= id=&gt;  | Email Address*
+        email &lt;INPUT type=text id=input-14&gt; Email Address* | sylvesterassiamah105@gma
+        click_filter &lt;DIV type= id=&gt; Reset Password | 
+        resetPasswordButton &lt;BUTTON type=submit id=&gt;  | Reset Password
+        beecatcher &lt;INPUT type=text id=e55addc3-3b7d-45f5-9ad3-8fd14aaa57&gt; Enter website. This input is for robots only, do n | 
+        bannerCloseButton &lt;BUTTON type=button id=&gt;  | 
+  [!] Workday account: error: account flow failed: 
+rc=0
+=== done 05:44:19
+```
+
+## 7. Slybox production wakes 2026-10-15 (check #2, 18:25Z)
+- 12:02Z and 13:02Z slices never ran: apply.yml step name with an unquoted &#x27;: &#x27; -&gt; slyci yaml error, silently reported success (fixed 5465dc9, guard be68901).
+- Slice 1 (be68901, 13:27Z): 7 attempted, 1 submitted (CHOP #1510 Program Coordinator I, Workday, email receipt), 1 submit_unconfirmed (Revolution Medicines #1003), 5 blocked (4 ATS keyword gate &lt;70, 1 tailor timeout). Applier 50.0 min, run 110 min, after-sweep scout ran 45 min.
+- Slice 2 (8c8c0f8, 16:03Z): 8 attempted, 0 submits, 6 blocked (5 ATS gate, 1 unanswerable visa/years), 2 weak_match. Applier 50.7 min.
+- Slice 3 (9c174ee, 18:02Z): in progress at check time; 2 CHOP skipped (board cap 3/day), 1 weak, 2 ATS gate, VUMC #1374 reached the Workday flow.
+- Day: 23 attempted, 2 unique submission attempts (baseline 3.7/day). Causes: a ~63-min run skips every other hourly slice (3 slices/day), pacing waits of 3-7 min burned 19-32 min of each 55-min applier budget, ATS keyword gate rejected ~60% of attempts, LLM scoring crashed to the 5/10 fallback on 4 of 7 jobs.
+
+## 8. Core new modules
+### specialty.py
+```python
+#!/usr/bin/env python3
+&quot;&quot;&quot;Specialty experience requirements: &quot;2-4 years in clinical research
+financial management&quot; is not &quot;years of experience&quot;, it is years of ONE
+thing — and the thing has to be on his record.
+
+10/15 MSK 1135 (Clinical Research Budget Manager): the JD asked for 2-4
+years in clinical research financial management, Medicare coverage
+analysis and clinical trial agreements. years_required() saw &quot;4 years&quot; and
+his 7 total years covered it; the term matcher counted &quot;budget&quot; (an ad
+agency&#x27;s production spend) and &quot;clinical&quot; (hospital device rollouts) as
+evidence; zero tier-1 requirements came out of the JD and &quot;mandatory
+requirements covered&quot; passed on an empty list. Rejected in 7 days.
+
+    from specialty import requirements
+    reqs = requirements(jd_text, bank)
+    # [{&#x27;years&#x27;: 2, &#x27;phrase&#x27;: &#x27;clinical research financial management&#x27;,
+    #   &#x27;required&#x27;: True, &#x27;tokens&#x27;: [...], &#x27;evidence&#x27;: [...], &#x27;roles&#x27;: [...],
+    #   &#x27;years_have&#x27;: 0.0, &#x27;covered&#x27;: False, &#x27;why&#x27;: &#x27;no evidence of: research, financial&#x27;}]
+
+A requirement is covered only when every significant word of the specialty
+appears in his approved record AND the roles carrying that evidence add up
+to the years asked. Evidence found only in a skills line (no role behind it)
+cannot prove years: the requirement is reported as &#x27;unknown&#x27; years, which
+the gate turns into a review, not a pass.
+&quot;&quot;&quot;
+import html
+import re
+from datetime import date
+
+# &quot;5+ years&quot; asked and 4.4 on the record is not a material shortfall; a
+# recruiter rounds, the gate does too. 3 asked / 2.4 held is.
+YEARS_TOLERANCE = 0.85
+HELD_FAMILIES = {&#x27;pm&#x27;, &#x27;analyst&#x27;, &#x27;infra&#x27;}   # title families his record actually holds
+
+SOFT_CTX = re.compile(r&#x27;\b(preferred|a plus|plus\b|nice to have|bonus|desired|ideally|strongly preferred|highly desirable)\b&#x27;, re.I)
+SOFT_HEADING = re.compile(r&#x27;^\s*(preferred|nice to have|bonus|desired|additional|what (?:would|will) (?:set you apart|make you stand out))\b&#x27;, re.I)
+REQ_HEADING = re.compile(r&#x27;^\s*(required|minimum|basic|key|essential|core|must[- ]have)?\s*(qualifications?|requirements?|skills?|experience|what you(?:\&#x27;ll)? (?:need|bring))\b&#x27;, re.I)
+
+QUAL = r&#x27;(?:progressive|progressively responsible|relevant|professional|hands[- ]on|proven|direct|recent|demonstrated|related|prior|previous|practical|applicable|solid|strong|successful|full[- ]time|equivalent|combined|industry|work)&#x27;
+# &quot;3+ years of experience in X&quot; / &quot;3-5 years&#x27; experience with X&quot; / &quot;3 years X experience&quot;
+# &quot;3+ years&quot;, &quot;2-4 years&quot;, &quot;two (2) years&quot;, &quot;3 to 5 yrs&#x27;&quot;
+_YEARS = r&#x27;\(?(?P&lt;n&gt;\d{1,2})\)?\s*(?:\+|-\s*(?P&lt;hi&gt;\d{1,2})|to\s+(?P&lt;hi2&gt;\d{1,2}))?\s*(?:or more\s+)?(?:years?|yrs)[\&#x27;’]?\s+&#x27;
+RX_IN = re.compile(_YEARS + r&#x27;(?:of\s+)?(?:&#x27; + QUAL + r&#x27;\s+)*(?:experience\s+|background\s+|track record\s+)?&#x27;
+                   r&#x27;(?:in|with|of|as(?: an?)?|managing|supporting|leading|performing|building|developing|administering|&#x27;
+                   r&#x27;maintaining|configuring|implementing|designing|coordinating|analyzing|running|using|&#x27;
+                   r&#x27;working (?:in|with|on)|doing)\s+&#x27;
+                   r&#x27;(?P&lt;phrase&gt;[^.;:()\n]{3,90})&#x27;, re.I)
+RX_PRE = re.compile(_YEARS + r&#x27;(?:of\s+)?(?:&#x27; + QUAL + r&#x27;\s+)*(?P&lt;phrase&gt;[a-z][^.;:()\n]{2,70}?)\s+(?:experience|background)\b&#x27;, re.I)
+
+STOP = {&#x27;a&#x27;, &#x27;an&#x27;, &#x27;the&#x27;, &#x27;of&#x27;, &#x27;in&#x27;, &#x27;or&#x27;, &#x27;and&#x27;, &#x27;with&#x27;, &#x27;for&#x27;, &#x27;to&#x27;, &#x27;at&#x27;, &#x27;on&#x27;, &#x27;as&#x27;, &#x27;by&#x27;, &#x27;from&#x27;, &#x27;within&#x27;,
+        &#x27;related&#x27;, &#x27;field&#x27;, &#x27;fields&#x27;, &#x27;role&#x27;, &#x27;roles&#x27;, &#x27;experience&#x27;, &#x27;environment&#x27;, &#x27;environments&#x27;, &#x27;setting&#x27;,
+        &#x27;settings&#x27;, &#x27;position&#x27;, &#x27;positions&#x27;, &#x27;capacity&#x27;, &#x27;similar&#x27;, &#x27;relevant&#x27;, &#x27;equivalent&#x27;, &#x27;combination&#x27;,
+        &#x27;directly&#x27;, &#x27;professional&#x27;, &#x27;progressive&#x27;, &#x27;progressively&#x27;, &#x27;responsible&#x27;, &#x27;hands&#x27;, &#x27;on&#x27;, &#x27;proven&#x27;,
+        &#x27;demonstrated&#x27;, &#x27;direct&#x27;, &#x27;recent&#x27;, &#x27;prior&#x27;, &#x27;previous&#x27;, &#x27;practical&#x27;, &#x27;applicable&#x27;, &#x27;solid&#x27;, &#x27;strong&#x27;,
+        &#x27;successful&#x27;, &#x27;full&#x27;, &#x27;time&#x27;, &#x27;industry&#x27;, &#x27;work&#x27;, &#x27;working&#x27;, &#x27;area&#x27;, &#x27;areas&#x27;, &#x27;discipline&#x27;, &#x27;function&#x27;,
+        &#x27;functions&#x27;, &#x27;organization&#x27;, &#x27;organizations&#x27;, &#x27;company&#x27;, &#x27;companies&#x27;, &#x27;setting&#x27;, &#x27;large&#x27;, &#x27;complex&#x27;,
+        &#x27;fast&#x27;, &#x27;paced&#x27;, &#x27;both&#x27;, &#x27;either&#x27;, &#x27;any&#x27;, &#x27;all&#x27;, &#x27;some&#x27;, &#x27;other&#x27;, &#x27;etc&#x27;, &#x27;including&#x27;, &#x27;such&#x27;, &#x27;that&#x27;,
+        &#x27;this&#x27;, &#x27;which&#x27;, &#x27;one&#x27;, &#x27;more&#x27;, &#x27;least&#x27;, &#x27;minimum&#x27;, &#x27;required&#x27;, &#x27;preferred&#x27;, &#x27;ideally&#x27;, &#x27;using&#x27;, &#x27;across&#x27;,
+        &#x27;multiple&#x27;, &#x27;various&#x27;, &#x27;general&#x27;, &#x27;overall&#x27;, &#x27;total&#x27;, &#x27;years&#x27;, &#x27;year&#x27;, &#x27;it&#x27;, &#x27;hands-on&#x27;, &#x27;hand-on&#x27;,
+        &#x27;relatable&#x27;, &#x27;following&#x27;, &#x27;full-time&#x27;, &#x27;specific&#x27;, &#x27;space&#x27;, &#x27;domain&#x27;, &#x27;sector&#x27;, &#x27;either&#x27;, &#x27;like&#x27;,
+        &#x27;preferably&#x27;, &#x27;ideally&#x27;, &#x27;closely&#x27;, &#x27;highly&#x27;, &#x27;very&#x27;, &#x27;well&#x27;, &#x27;new&#x27;, &#x27;own&#x27;,
+        &#x27;post-collegiate&#x27;, &#x27;collegiate&#x27;, &#x27;post-graduate&#x27;, &#x27;postgraduate&#x27;, &#x27;post-college&#x27;, &#x27;college&#x27;, &#x27;university&#x27;,
+        &#x27;post-bachelor&#x27;, &#x27;post-degree&#x27;, &#x27;cumulative&#x27;, &#x27;verifiable&#x27;, &#x27;documented&#x27;, &#x27;paid&#x27;, &#x27;recent&#x27;, &#x27;current&#x27;,
+        &#x27;corporate&#x27;, &#x27;business&#x27;, &#x27;office&#x27;, &#x27;workplace&#x27;, &#x27;team&#x27;, &#x27;teams&#x27;, &#x27;customer&#x27;, &#x27;customers&#x27;, &#x27;client&#x27;, &#x27;clients&#x27;,
+        &#x27;people&#x27;, &#x27;person&#x27;, &#x27;individual&#x27;, &#x27;employer&#x27;, &#x27;employment&#x27;, &#x27;job&#x27;, &#x27;jobs&#x27;, &#x27;career&#x27;, &#x27;track&#x27;, &#x27;record&#x27;,
+        &#x27;additional&#x27;, &#x27;relative&#x27;, &#x27;lieu&#x27;, &#x27;degree&#x27;, &#x27;bachelor&#x27;, &#x27;bachelors&#x27;, &#x27;essential&#x27;, &#x27;duties&#x27;, &#x27;outlined&#x27;,
+        &#x27;various&#x27;, &#x27;functional&#x27;, &#x27;preference&#x27;, &#x27;have&#x27;, &#x27;formal&#x27;, &#x27;technical&#x27;, &#x27;senior&#x27;, &#x27;level&#x27;, &#x27;broad&#x27;,
+        &#x27;knowledge&#x27;, &#x27;through&#x27;, &#x27;phases&#x27;, &#x27;inception&#x27;, &#x27;bs/ba&#x27;, &#x27;mba/ms&#x27;, &#x27;ba/bs&#x27;, &#x27;job-related&#x27;, &#x27;work-related&#x27;}
+# words that look like a specialty but only restate the career (&quot;a related field&quot;)
+GENERIC_PHRASES = {&#x27;&#x27;, &#x27;experience&#x27;, &#x27;a related field&#x27;, &#x27;related field&#x27;, &#x27;a similar role&#x27;, &#x27;similar role&#x27;,
+                   &#x27;the field&#x27;, &#x27;a professional setting&#x27;, &#x27;a similar capacity&#x27;, &#x27;industry&#x27;, &#x27;the industry&#x27;,
+                   &#x27;a corporate environment&#x27;, &#x27;a related role&#x27;, &#x27;a relevant field&#x27;, &#x27;relevant experience&#x27;,
+                   &#x27;professional experience&#x27;, &#x27;work experience&#x27;, &#x27;a related discipline&#x27;}
+_MONTHS = {m: i for i, m in enumerate([&#x27;january&#x27;, &#x27;february&#x27;, &#x27;march&#x27;, &#x27;april&#x27;, &#x27;may&#x27;, &#x27;june&#x27;, &#x27;july&#x27;, &#x27;august&#x27;,
+                                       &#x27;september&#x27;, &#x27;october&#x27;, &#x27;november&#x27;, &#x27;december&#x27;], 1)}
+
+
+def _units(text: str) -&gt; list[tuple[str, bool]]:
+    &quot;&quot;&quot;(unit, soft): a line or sentence, and whether it sits under a
+    &#x27;Preferred&#x27; heading or carries a soft qualifier itself.&quot;&quot;&quot;
+    out, soft_section = [], False
+    # frozen JDs carry their HTML: a &lt;li&gt; is a line, an entity is a character
+    text = html.unescape(re.sub(r&#x27;&lt;[^&gt;]+&gt;&#x27;, &#x27;\n&#x27;, text or &#x27;&#x27;))
+    for raw in re.split(r&#x27;\n+&#x27;, text.replace(&#x27;\r&#x27;, &#x27;&#x27;)):
+        line = raw.strip(&#x27; •·-*\t&#x27;)
+        if not line:
+            continue
+        if len(line) &lt; 60 and (REQ_HEADING.match(line) or SOFT_HEADING.match(line)):
+            # a heading switches the section: &quot;Preferred Qualifications&quot; softens
+            # every line under it until the next &quot;Requirements&quot;-type heading
+            soft_section = bool(SOFT_HEADING.match(line))
+            continue
+        # a flattened Workday list has no punctuation: &quot;... experience Required At
+        # least three (3) years ... Preferred ...&quot; — the qualifier ends the unit
+        line = re.sub(r&#x27;\b(Required|Preferred)\s+(?=[A-Z])&#x27;, r&#x27;\1. &#x27;, line)
+        for s in re.split(r&#x27;(?&lt;=[.;!?])\s+(?=[A-Z0-9•])&#x27;, line):
+            s = s.strip()
+            if len(s) &gt; 8:
+                out.append((s, soft_section or bool(SOFT_CTX.search(s))))
+    return out
+
+
+def _clean_phrase(p: str) -&gt; str:
+    p = re.sub(r&#x27;\s+&#x27;, &#x27; &#x27;, p.lower()).strip(&#x27; \&#x27;&quot;’-&#x27;)
+    # the specialty ends where the sentence turns: &quot;... is expected&quot;, &quot;... which includes&quot;,
+    # or where a flattened Workday list runs on: &quot;... experience Required At least three&quot;
+    p = re.sub(r&#x27;\s+(?:is|are|was|were|will|would|should|must|which|that|who|where|to|required|preferred|desired|&#x27;
+               r&#x27;including|such as|e\.g\.?|i\.e\.?|and/or a|in lieu|can substitute|may substitute)\b.*$&#x27;, &#x27;&#x27;, p).strip()
+    # &quot;program management experience in healthcare information technology, radiology&quot;:
+    # what follows &#x27;experience&#x27; is a qualifier of where, not another specialty
+    p = re.sub(r&#x27;\s+(?:experience|background)\b.*$&#x27;, &#x27;&#x27;, p)
+    p = re.sub(r&#x27;,\s*$&#x27;, &#x27;&#x27;, p)
+    p = re.sub(r&#x27;\b(required|preferred|essential|necessary|desired)\b\s*$&#x27;, &#x27;&#x27;, p).strip()
+    p = re.sub(r&#x27;^(?:an?|the)\s+&#x27;, &#x27;&#x27;, p)
+    p = re.sub(r&#x27;^(?:experience|background)\s+(?:working\s+)?(?:in|with|of|as(?: an?)?)\s+&#x27;, &#x27;&#x27;, p)
+    p = re.sub(r&#x27;\s+(?:experience|background)$&#x27;, &#x27;&#x27;, p)
+    return p
+
+
+def _alternatives(phrase: str) -&gt; list[list[str]]:
+    &quot;&quot;&quot;&#x27;healthcare or account management&#x27; is either one; each alternative is
+    its own token list and the requirement is covered when any one is.&quot;&quot;&quot;
+    # &quot;administration, coordination or program&quot;: commas list alternatives too
+    parts = [x.strip() for x in re.split(r&#x27;\s+(?:or|and/or)\s+|\s*/\s*|,\s*(?:or\s+)?&#x27;, phrase) if x.strip()] or [phrase]
+    alts = [_tokens(x) for x in parts]
+    # &quot;project or program management&quot;: a one-word alternative shares the
+    # head noun of the next one — &#x27;project&#x27; alone is not an alternative.
+    # Only for a plain &quot;A or B C&quot;; a comma list (&quot;helpdesk, technical product
+    # support or ...&quot;) names whole alternatives already.
+    if &#x27;,&#x27; not in phrase:
+        for i in range(len(alts) - 1):
+            if len(alts[i]) == 1 and len(alts[i + 1]) &gt;= 2:
+                alts[i] = alts[i] + alts[i + 1][1:]
+    alts = [a for a in alts if a]
+    return alts or [_tokens(phrase)]
+
+
+def _tokens(phrase: str) -&gt; list[str]:
+    toks = re.findall(r&#x27;[a-z][a-z/&amp;+-]{1,}&#x27;, phrase.lower())
+    toks = [t.strip(&#x27;/&amp;+-&#x27;) for t in toks]
+    return [t for t in toks if t and t not in STOP and len(t) &gt; 2]
+
+
+SYNONYMS = {   # a JD&#x27;s word for a thing his record names another way
+    &#x27;helpdesk&#x27;: [&#x27;help desk&#x27;, &#x27;service desk&#x27;, &#x27;incidents&#x27;], &#x27;help&#x27;: [&#x27;service desk&#x27;, &#x27;help desk&#x27;, &#x27;incidents&#x27;],
+    &#x27;support&#x27;: [&#x27;support&#x27;, &#x27;incidents&#x27;, &#x27;point of contact&#x27;],
+    &#x27;customer-facing&#x27;: [&#x27;client-facing&#x27;, &#x27;clinicians&#x27;, &#x27;customer&#x27;], &#x27;client-facing&#x27;: [&#x27;client-facing&#x27;, &#x27;customer&#x27;],
+    &#x27;end-user&#x27;: [&#x27;clinical and administrative staff&#x27;, &#x27;end user&#x27;], &#x27;pm&#x27;: [&#x27;project management&#x27;],
+    &#x27;ehr&#x27;: [&#x27;ehr&#x27;, &#x27;epic&#x27;, &#x27;emr&#x27;], &#x27;emr&#x27;: [&#x27;ehr&#x27;, &#x27;epic&#x27;, &#x27;emr&#x27;], &#x27;itsm&#x27;: [&#x27;servicenow&#x27;, &#x27;itsm&#x27;],
+    &#x27;ad&#x27;: [&#x27;active directory&#x27;], &#x27;o365&#x27;: [&#x27;microsoft 365&#x27;, &#x27;office 365&#x27;], &#x27;m365&#x27;: [&#x27;microsoft 365&#x27;, &#x27;office 365&#x27;],
+    &#x27;administration&#x27;: [&#x27;administrative&#x27;, &#x27;coordinat&#x27;], &#x27;administrative&#x27;: [&#x27;administrative&#x27;, &#x27;coordinat&#x27;],
+    &#x27;coordination&#x27;: [&#x27;coordinat&#x27;], &#x27;leadership&#x27;: [&#x27;lead &#x27;, &#x27;led &#x27;, &#x27;leads &#x27;], &#x27;supervisory&#x27;: [&#x27;lead &#x27;, &#x27;led &#x27;],
+    &#x27;troubleshooting&#x27;: [&#x27;troubleshoot&#x27;, &#x27;resolve&#x27;, &#x27;traced&#x27;], &#x27;stakeholder&#x27;: [&#x27;stakeholder&#x27;, &#x27;physicians&#x27;, &#x27;clients&#x27;],
+}
+# a title family he has not held carries only when the proven specialty is
+# in that family&#x27;s own domain (&quot;direct site management&quot; does not make him a CRA)
+FAMILY_DOMAIN = {&#x27;clinical_ops&#x27;: {&#x27;clinical&#x27;, &#x27;research&#x27;, &#x27;trial&#x27;, &#x27;trials&#x27;, &#x27;study&#x27;, &#x27;studies&#x27;, &#x27;cra&#x27;, &#x27;ctms&#x27;, &#x27;irb&#x27;, &#x27;gcp&#x27;},
+                 &#x27;iam&#x27;: {&#x27;identity&#x27;, &#x27;iam&#x27;, &#x27;access&#x27;, &#x27;sailpoint&#x27;, &#x27;okta&#x27;, &#x27;provisioning&#x27;, &#x27;sso&#x27;, &#x27;mfa&#x27;},
+                 &#x27;implementation&#x27;: {&#x27;implementation&#x27;, &#x27;implementations&#x27;, &#x27;onboarding&#x27;, &#x27;deployment&#x27;, &#x27;deployments&#x27;, &#x27;go-live&#x27;}}
+
+
+def _stem(w: str) -&gt; str:
+    &quot;&quot;&quot;Light stem: plural and -ing/-ed only, never into the root (10/16: the
+    old rule turned &#x27;operations&#x27; into &#x27;oper&#x27;, which matched &#x27;pre-operative&#x27;).&quot;&quot;&quot;
+    w = w.lower()
+    for suf in (&#x27;ies&#x27;, &#x27;ings&#x27;, &#x27;ing&#x27;, &#x27;ed&#x27;, &#x27;es&#x27;, &#x27;s&#x27;):
+        if w.endswith(suf) and len(w) - len(suf) &gt;= 5:
+            return w[:-len(suf)] + (&#x27;i&#x27; if suf == &#x27;ies&#x27; else &#x27;&#x27;)
+    return w
+
+
+def _role_months(dates: str) -&gt; float:
+    m = re.findall(r&#x27;([A-Za-z]+)\s+(\d{4})&#x27;, dates or &#x27;&#x27;)
+    if not m:
+        return 0.0
+    y0, m0 = int(m[0][1]), _MONTHS.get(m[0][0].lower(), 1)
+    if len(m) &gt; 1:
+        y1, m1 = int(m[1][1]), _MONTHS.get(m[1][0].lower(), 1)
+    else:
+        t = date.today()
+        y1, m1 = t.year, t.month
+    return max(0.0, (y1 - y0) * 12 + (m1 - m0) + 1)
+
+
+def _haystacks(bank: dict) -&gt; tuple[dict, str]:
+    &quot;&quot;&quot;role id -&gt; its approved text (bullets, variants, tags, title); plus the
+    role-less text (skills, certifications, approved summaries).&quot;&quot;&quot;
+    by_role: dict = {}
+    for r in bank.get(&#x27;roles&#x27;, []):
+        if r.get(&#x27;on_resume&#x27;) is False:
+            continue
+        by_role[r[&#x27;id&#x27;]] = [r.get(&#x27;title&#x27;, &#x27;&#x27;)]
+    for b in bank.get(&#x27;bullets&#x27;, []):
+        if not b.get(&#x27;approved&#x27;) or b.get(&#x27;status&#x27;) == &#x27;retired&#x27; or b[&#x27;role&#x27;] not in by_role:
+            continue
+        by_role[b[&#x27;role&#x27;]].append(b[&#x27;text&#x27;] + &#x27; &#x27; + &#x27; &#x27;.join(b.get(&#x27;tags&#x27;, [])))
+        by_role[b[&#x27;role&#x27;]] += [v[&#x27;text&#x27;] for v in b.get(&#x27;variants&#x27;, []) if v.get(&#x27;approved&#x27;)]
+    loose = [i for c in bank.get(&#x27;skills&#x27;, []) for i in c.get(&#x27;items&#x27;, [])]
+    loose += list(bank.get(&#x27;certifications&#x27;, []))
+    loose += [s[&#x27;text&#x27;] for s in bank.get(&#x27;summaries&#x27;, []) if s.get(&#x27;approved&#x27;)]
+    return {k: &#x27; &#x27;.join(v).lower() for k, v in by_role.items()}, &#x27; &#x27;.join(loose).lower()
+
+
+def _found(tok: str, hay: str) -&gt; bool:
+    st = _stem(tok)
+    if re.search(r&#x27;\b&#x27; + re.escape(st), hay):
+        return True
+    return any(re.search(r&#x27;\b&#x27; + re.escape(s), hay) for s in SYNONYMS.get(tok, ()))
+
+
+def requirements(jd_text: str, bank: dict) -&gt; list[dict]:
+    &quot;&quot;&quot;Every &#x27;N years in &lt;specialty&gt;&#x27; the JD asks for, with his evidence.&quot;&quot;&quot;
+    out, seen = [], set()
+    role_hay, loose_hay = _haystacks(bank)
+    role_months = {r[&#x27;id&#x27;]: _role_months(r.get(&#x27;dates&#x27;, &#x27;&#x27;)) for r in bank.get(&#x27;roles&#x27;, []) if r.get(&#x27;on_resume&#x27;) is not False}
+    for unit, soft in _units(jd_text):
+        for rx in (RX_IN, RX_PRE):
+            for m in rx.finditer(unit):
+                phrase = _clean_phrase(m.group(&#x27;phrase&#x27;))
+                toks = _tokens(phrase)
+                if phrase in GENERIC_PHRASES or not toks:
+                    continue
+                key = &#x27; &#x27;.join(sorted(toks))
+                if key in seen:
+                    continue
+                seen.add(key)
+                n = int(m.group(&#x27;n&#x27;))
+                if not 1 &lt;= n &lt;= 25:
+                    continue
+                # best alternative wins: roles proving it, else skills-only, else missing words
+                best = None
+                for alt in _alternatives(phrase):
+                    roles = [rid for rid, hay in role_hay.items() if all(_found(t, hay) for t in alt)]
+                    missing = [t for t in alt if not any(_found(t, hay) for hay in list(role_hay.values()) + [loose_hay])]
+                    yrs = round(sum(role_months[r] for r in roles) / 12, 1) if roles else None
+                    cand = (2 if roles else 1 if not missing else 0, yrs or 0, alt, roles, missing, yrs)
+                    if best is None or cand[:2] &gt; best[:2]:
+                        best = cand
+                _, _, toks, roles, missing, years_have = best
+                if not roles and missing:
+                    years_have = 0.0
+                if missing:
+                    covered, why = False, &#x27;no evidence of: &#x27; + &#x27;, &#x27;.join(missing)
+                elif years_have is None:
+                    covered, why = False, &#x27;named in skills only — no role shows the years&#x27;
+                elif years_have &gt;= n * YEARS_TOLERANCE:
+                    covered, why = True, f&#x27;{years_have} years across {&quot;, &quot;.join(roles)}&#x27;
+                else:
+                    covered, why = False, f&#x27;{years_have} years across {&quot;, &quot;.join(roles)} &lt; {n} asked&#x27;
+                out.append({&#x27;years&#x27;: n, &#x27;phrase&#x27;: phrase, &#x27;required&#x27;: not soft, &#x27;tokens&#x27;: toks,
+                            &#x27;evidence&#x27;: [f&#x27;role:{r}&#x27; for r in roles] if roles else ([] if missing else [&#x27;skills&#x27;]),
+                            &#x27;roles&#x27;: roles, &#x27;years_have&#x27;: years_have, &#x27;covered&#x27;: covered, &#x27;why&#x27;: why,
+                            &#x27;unit&#x27;: unit[:160]})
+    return out
+
+
+def extraction_suspect(jd_text: str, reqs: list[dict]) -&gt; str | None:
+    &quot;&quot;&quot;Why an empty tier-1 list should be read as &#x27;extraction failed&#x27;: the JD
+    names years and none became a requirement, or there is hardly any JD.&quot;&quot;&quot;
+    text = html.unescape(re.sub(r&#x27;&lt;[^&gt;]+&gt;&#x27;, &#x27; &#x27;, jd_text or &#x27;&#x27;))
+    if len(text) &lt; 600:
+        return f&#x27;JD is {len(text)} characters — too little to extract requirements from&#x27;
+    years = re.search(r&#x27;\(?\b\d{1,2}\)?\s*\+?\s*(?:-\s*\d{1,2}\s*)?(?:years?|yrs)\b&#x27;, text, re.I)
+    if years and not any(r.get(&#x27;kind&#x27;) in (&#x27;years&#x27;, &#x27;specialty&#x27;) for r in reqs):
+        return f&#x27;JD says &quot;{years.group(0)}&quot; and no years requirement was extracted&#x27;
+    return None
+
+
+if __name__ == &#x27;__main__&#x27;:
+    import json
+    import sys
+    from pathlib import Path
+    bank = json.loads((Path(__file__).parent / &#x27;bank.json&#x27;).read_text())
+    text = Path(sys.argv[1]).read_text() if len(sys.argv) &gt; 1 else sys.stdin.read()
+    for r in requirements(text, bank):
+        print((&#x27;REQ &#x27; if r[&#x27;required&#x27;] else &#x27;pref&#x27;) + f&quot; {r[&#x27;years&#x27;]}+ yrs {r[&#x27;phrase&#x27;]!r}: &quot;
+              + (&#x27;covered&#x27; if r[&#x27;covered&#x27;] else &#x27;NOT covered&#x27;) + f&quot; — {r[&#x27;why&#x27;]}&quot;)
+```
+### qualification_gate.py
+```python
+#!/usr/bin/env python3
+&quot;&quot;&quot;The qualification verdict: is he qualified for THIS job, by its own
+requirements, on evidence? PASS / REVIEW / BLOCK, every reason named.
+
+10/15: MSK 1135 went out with an empty tier-1 list (so &quot;mandatory
+requirements covered&quot; passed on nothing), a 5/10 match score that was the
+crash fallback, and a ranker row saying out of lane. Three checks, none of
+which enforced anything. From here on uncertainty stops the pipeline instead
+of turning into permission:
+
+  BLOCK   a hard requirement he does not meet — credential not held, years
+          beyond his record, a specialty (N years in X) with no evidence or
+          not enough years, a senior title, a title in no lane
+  REVIEW  the gate cannot tell — no tier-1 requirement came out of the JD
+          (extraction may have failed), a specialty proven only by a skills
+          line (no role shows the years), a title he has not held with no
+          specialty evidence either way, a match score that is the fallback
+  PASS    every mandatory requirement maps to evidence; lane and title agree
+          or the specialty evidence carries the title
+
+    from qualification_gate import verdict
+    v = verdict(match)            # {&#x27;verdict&#x27;, &#x27;reasons&#x27;, &#x27;review&#x27;, &#x27;block&#x27;}
+    v = verdict(match, score)     # score = ai_engine.score_job_match() dict, when known
+
+Preferred qualifications never block; a specialty under a &quot;Preferred&quot;
+heading is reported, not enforced. Nothing here reads the title alone as a
+rejection: &quot;Project Coordinator&quot; vs &quot;Program Coordinator&quot; is not a block.
+&quot;&quot;&quot;
+
+from specialty import HELD_FAMILIES, FAMILY_DOMAIN
+
+REVIEW_STATUS = &#x27;review_required&#x27;
+BLOCK_STATUS = &#x27;blocked_qualification&#x27;
+
+
+def verdict(match: dict, score: dict | None = None) -&gt; dict:
+    block, review = [], []
+    lane = match.get(&#x27;lane&#x27;) or {}
+    reqs = match.get(&#x27;requirements&#x27;) or []
+    if lane.get(&#x27;family&#x27;) == &#x27;other&#x27;:
+        block.append(&#x27;title is in no lane the engine applies to&#x27;)
+    if lane.get(&#x27;seniority&#x27;) == &#x27;senior&#x27;:
+        block.append(&#x27;senior-level title&#x27;)
+    t1 = [r for r in reqs if r.get(&#x27;tier&#x27;) == 1]
+    for r in t1:
+        if r.get(&#x27;covered&#x27;):
+            continue
+        kind = r.get(&#x27;kind&#x27;)
+        if kind in (&#x27;knockout&#x27;, &#x27;years&#x27;):
+            block.append(f&quot;mandatory: {r[&#x27;requirement&#x27;]}&quot;)
+        elif kind == &#x27;specialty&#x27;:
+            if r.get(&#x27;years_have&#x27;) is None:
+                review.append(f&quot;{r[&#x27;requirement&#x27;]}: {r.get(&#x27;why&#x27;, &#x27;years unknown&#x27;)}&quot;)
+            else:
+                block.append(f&quot;{r[&#x27;requirement&#x27;]}: {r.get(&#x27;why&#x27;, &#x27;not evidenced&#x27;)}&quot;)
+    # an empty tier-1 list is a review only when it looks like extraction
+    # failed (years named in the JD and none extracted; a near-empty JD). A
+    # JD whose only hard requirement is a Bachelor&#x27;s he holds legitimately
+    # has nothing left at tier 1.
+    if not t1 and match.get(&#x27;extraction_suspect&#x27;):
+        review.append(f&quot;no mandatory requirement extracted: {match[&#x27;extraction_suspect&#x27;]}&quot;)
+    # title family he has not held (iam / implementation / clinical_ops):
+    # not a rejection by itself — it passes when the JD names a specialty
+    # his record proves, and goes to review when it names none
+    fam = lane.get(&#x27;family&#x27;)
+    domain = FAMILY_DOMAIN.get(fam, set())
+    spec_ok = [r for r in reqs if r.get(&#x27;kind&#x27;) == &#x27;specialty&#x27; and r.get(&#x27;covered&#x27;)
+               and (not domain or set(r[&#x27;requirement&#x27;].lower().replace(&#x27;-&#x27;, &#x27; &#x27;).split()) &amp; domain)]
+    if fam not in HELD_FAMILIES and fam != &#x27;other&#x27; and not spec_ok and not block:
+        review.append(f&quot;{fam} title is not a family he has held and the JD names no {fam} specialty his record proves&quot;)
+    if score is not None:
+        if score.get(&#x27;fallback&#x27;) or score.get(&#x27;reason&#x27;) == &#x27;Could not score&#x27;:
+            review.append(&#x27;match score is the fallback, not an assessment&#x27;)
+    if block:
+        v = &#x27;BLOCK&#x27;
+    elif review:
+        v = &#x27;REVIEW&#x27;
+    else:
+        v = &#x27;PASS&#x27;
+    return {&#x27;verdict&#x27;: v, &#x27;block&#x27;: block, &#x27;review&#x27;: review, &#x27;reasons&#x27;: block + review}
+
+
+def status_for(v: dict) -&gt; str | None:
+    return {&#x27;BLOCK&#x27;: BLOCK_STATUS, &#x27;REVIEW&#x27;: REVIEW_STATUS}.get(v[&#x27;verdict&#x27;])
+```
+
+## 9. Open decisions
+- Merge quality-gate to main?
+- Approve any of the 10 employer-named summary sentences in bank.summary_sentences (approved:false drafts)?
+- Keep review_required as a status (human loop) or fold it into block?
+- Dry-run boundary (branch dryrun-boundary): stop before sign-in / reset / verification at the browser layer; opt-in flag for authenticated dry runs; no automatic password reset for a stale credential.
+
+
+## 10. Dry-run boundary (branch dryrun-boundary, commit d358272)
+Finding: the BMC 1137 dry run (section 6) signed in to the real BostonMedicalCenter Workday account, had the password rejected and clicked &#x27;Forgot password&#x27; — the 1:44 AM reset email. --dry-run stopped only the submit. Audit of that run: no application field was filled, no resume uploaded to the ATS, no submit; the only state change was the reset request (link unused).
+### Commit
+```
+d358272 feat: dry runs stop at the browser before any account traffic
+
+A --dry-run of BMC 1137 signed in to the real Workday candidate account,
+had the stored password rejected and clicked &quot;Forgot password&quot; — a live
+reset email. The flag only stopped the final submit; every handler had to
+remember to stop on its own, and the account flow did not.
+
+- dry_run_boundary.py: one mode per process (live / dry / dry-auth),
+  pinned by run_apply and run_batch from dry_run. context.route(&#x27;**/*&#x27;)
+  is armed on every browser context the applier makes (launched,
+  persistent profile, CDP-attached): in dry mode only GET/HEAD/OPTIONS
+  leave the browser and no sign-in, account, password-reset,
+  verification, OTP or submit URL does at all. Filling a form is local;
+  posting it is not.
+- guard() raises DryRunBoundary inside the shared helpers before the
+  step: do_signin, do_create, do_reset, wait_for_link, wait_for_code,
+  click_submit, get_security_code. ensure_account returns at the
+  boundary before the account form is opened; the result is status
+  dry_run, not needs_account.
+- --auth (only together with --dry-run; SCIPIO_DRY_RUN_AUTH=1 is never
+  honored without it) allows sign-in to an EXISTING account so an
+  authenticated flow can be walked; create, reset, verification and
+  submit stay blocked.
+- a rejected password no longer triggers a reset by itself: do_reset
+  runs only with SCIPIO_ALLOW_PASSWORD_RESET=1, otherwise the stale
+  credential is written to stale_credentials.json and the job parks as
+  needs_account. The BMC credential was not touched.
+- test_dry_run_boundary.py (42 fixtures): mode resolution, request
+  decisions per mode, helper guard, route handler, and source wiring —
+  every context creation installs the guard, every helper is guarded.
+  Catalog DRY-001 (P0); 54/54.
+- verified with a Mac --dry-run of the same BMC job: &quot;[dry] boundary
+  armed&quot;, the sign-in page request blocked, no form, no reset email.
+
+```
+### Dry run 3 — same BMC job under the boundary
+```
+=== DRY RUN 3: bmc 1137 with the boundary (expect: boundary armed, stop before sign-in, no reset) 06:21:08
+  [dry] boundary armed (dry): no sign-in, account, reset, verification or submit requests leave this browser
+  [*] JD prefetched for tailoring (7275 chars)
+  [*] Job identity: BMC Company 100 — Project Coordinator
+  [*] Salary answer for this posting: 85,000 / $81,000 - $95,000 (market)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SCIPIO APPLICATION REVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company:   BMC Company 100
+Role:      Project Coordinator
+URL:       https://bmc.wd1.myworkdayjobs.com/BMC/job/Boston/Project-Coordinator_50417
+
+WHY THIS JOB?
+  Project Management + Timelines + Clinical Workflows + Pharmacy + Cross-functional + Stakeholder Management
+
+RESUME:    Healthcare family
+JD MATCH:  85% weighted coverage, 69% keyword echo
+EVIDENCE:  12/14 requirements (T1 1/1, T2 10/12)
+CONFIDENCE: 85/100
+
+  ✓ T1 2+ years experience  ← profile:years_experience=6
+  ✓ T2 clinical  ← bullet:hmh-devices-18
+  ✓ T2 compliance  ← bullet:con-mlr-30
+  ✓ T2 coordinator  ← summary:sum-coord
+  ✓ T2 excel  ← bullet:con-cosentyx
+  ✓ T2 hospital  ← bullet:hmh-devices-18
+  ✓ T2 patient  ← bullet:hmh-scan-40
+  ✓ T2 pharmacy  ← bullet:con-8campaigns
+  ✓ T2 phi  ← skill:Healthcare:HIPAA/PHI compliance
+  ✓ T2 process improvement  ← bullet:con-14k
+  ✓ T2 project  ← bullet:con-4accounts
+  ✗ T2 audit
+  ✗ T2 monitoring
+  ✓ T4 communication  ← bullet:alt-19k
+
+PREFLIGHT
+  ✓ candidate identity
+  ✓ company and role present
+  ✓ JD analyzed
+  ✓ resume family selected before tailoring
+  ✓ resume artifact present (md + pdf)
+  ✓ evidence mapped (every line has an approved record)
+  ✓ render fidelity (PDF carries every bullet)
+  ✓ no Scipio / automation / ATS language
+  ✓ recruiter test (reads as a normal, truthful resume)
+  ✓ truth (locked roles: employer, title, dates; no parked role)
+  ✓ RESUME_RULES
+  ✓ no claim appears twice (summary + bullets)
+  ✓ mandatory requirements covered
+  ✓ no unsupported skill claims
+  ✓ qualified by the JD&#x27;s own requirements (lane, specialty, years, credentials)
+  ✓ seniority eligible
+  ✓ location eligible
+  ✓ mandatory qualifications eligible
+  ✓ salary policy
+  ✓ lane eligible
+  ✓ not a duplicate submit
+  ✓ ATS / application path supported
+
+STATUS: READY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [*] Resume TAILORED + PREFLIGHT PASSED: BMC_Company_100_adhoc.pdf sha256 3e0aa457240d (coverage 85%, confidence 85)
+  [*] Navigating to https://bmc.wd1.myworkdayjobs.com/BMC/job/Boston/Project-Coordinator_50417
+  [dry] blocked POST https://bmc.wd1.myworkdayjobs.com/BMC/job/Boston/undefined (POST in a dry run)
+  [*] Detected ATS: workday
+  [*] Match score: 6/10 — Candidate&#x27;s 6 years of IT infrastructure and project coordination experience aligns with mid-level project coordinator duties, but lacks direct healthcare patient coordination and clinical data management expertise required for this specialized role.
+  [*] ATS keyword coverage: 62% (missing: monitoring, audit, patient, process improvement, communication)
+  [dry] blocked POST https://uxi-ingestion.us.mlde.workday.com/ (POST in a dry run)
+  [*] Workday flow
+  [dry] blocked GET https://bmc.wd1.myworkdayjobs.com/wday/calypso/cxs/account/bmc/BMC/authproviders?successRedirectUri= (sign-in)
+  [!] Workday account: error: no sign-in form rendered
+rc=0
+=== done 06:24:37
+```
+### Boundary fixtures
+```
+  ok   live when dry_run is False
+  ok   dry when --dry-run alone
+  ok   dry-auth needs --dry-run AND --auth
+  ok   env SCIPIO_DRY_RUN_AUTH=1 without --dry-run is still live (never implicit)
+  ok   env SCIPIO_DRY_RUN_AUTH=1 with --dry-run is dry-auth
+  ok   dry: GET the job page is allowed
+  ok   dry: GET a Workday page-render XHR is allowed
+  ok   dry: POST sign-in is blocked
+  ok   dry: GET the sign-in page is blocked
+  ok   dry: GET a password-reset link is blocked
+  ok   dry: POST create account is blocked
+  ok   dry: GET a verification link is blocked
+  ok   dry: POST a greenhouse application is blocked
+  ok   dry: GET the greenhouse form is allowed
+  ok   dry: any POST is blocked (field data never leaves the browser)
+  ok   dry-auth: POST sign-in is allowed
+  ok   dry-auth: GET password reset still blocked
+  ok   dry-auth: POST create account still blocked
+  ok   dry-auth: verification still blocked
+  ok   dry-auth: POST a greenhouse application still blocked
+  ok   dry-auth: Workday page traffic allowed after sign-in
+  ok   live: everything allowed
+  ok   dry: guard refuses signin / create / reset / verification / code / submit
+  ok   dry-auth: guard allows signin only
+  ok   live: guard is silent
+  ok   dry: install arms a catch-all route
+  ok   dry: route continues the job page
+  ok   dry: route aborts sign-in, reset and submit
+  ok   live: install is a no-op
+  ok   applier: every browser context creation (4) is followed by boundary.install (4)
+  ok   applier: click_submit is guarded
+  ok   applier: get_security_code is guarded
+  ok   applier: run_apply and run_batch pin the mode from dry_run
+  ok   applier: --auth is parsed only next to --dry-run
+  ok   workday: do_signin is guarded (signin)
+  ok   workday: do_create is guarded (create_account)
+  ok   workday: do_reset is guarded (reset_password)
+  ok   workday: wait_for_link is guarded (verification)
+  ok   workday: wait_for_code is guarded (security_code)
+  ok   workday: a rejected password never resets by itself
+  ok   workday: ensure_account stops at the boundary before opening the account form
+  ok   workday: a boundary stop reports status dry_run, not needs_account
+dry-run boundary fixtures: pass
+```
+### dry_run_boundary.py
+```python
+#!/usr/bin/env python3
+&quot;&quot;&quot;The dry-run boundary: a dry run never touches a real employer account.
+
+10/16: a Mac dry run of BMC 1137 passed the gate, opened the Workday page,
+tried the stored password, had it rejected and clicked &quot;Forgot password&quot; —
+a real reset email from BostonMedicalCenter at 1:44 AM. --dry-run stopped
+the SUBMIT and nothing else. From here the boundary sits in the browser
+layer, not in each handler&#x27;s memory:
+
+  live      every request allowed (dry_run False)
+  dry       --dry-run: GET/HEAD/OPTIONS only, and no GET to a sign-in,
+            account, password-reset, verification or OTP URL. Filling
+            fields on a page is local; posting them, signing in, creating
+            an account, recovering a password or requesting a code is a
+            request, and the route guard aborts it before it leaves.
+  dry-auth  --dry-run --auth (or SCIPIO_DRY_RUN_AUTH=1 with --dry-run):
+            sign-in to an EXISTING account is allowed so an authenticated
+            flow can be walked; account creation, password reset,
+            verification and submission stay blocked. Never implied by
+            --dry-run alone.
+
+Two layers, same rules:
+  install(context)      context.route(&#x27;**/*&#x27;) aborts blocked requests
+                        (call at every place a browser context is made)
+  guard(action)         raises DryRunBoundary inside the shared helpers
+                        (sign-in, create account, reset, verification,
+                        code polling, submit) so a handler cannot reach
+                        the network step in the first place
+&quot;&quot;&quot;
+import os
+import re
+from urllib.parse import urlsplit
+
+_MODE = &#x27;live&#x27;
+_SEEN: set = set()
+SAFE_METHODS = {&#x27;GET&#x27;, &#x27;HEAD&#x27;, &#x27;OPTIONS&#x27;}
+# URL shapes of account state changes. Sign-in has its own list so dry-auth
+# can allow it while the rest stays shut.
+SIGNIN_RX = re.compile(r&#x27;(sign[-_]?in|login|log[-_]?in|authenticate|session|oauth|sso|saml)&#x27;, re.I)
+ACCOUNT_RX = re.compile(r&#x27;(create[-_]?account|register|sign[-_]?up|reset[-_]?password|resetpassword|forgot|password[-_]?reset|&#x27;
+                        r&#x27;recover|verif(y|ication)|activat(e|ion)|otp|one[-_]?time|security[-_]?code|mfa|2fa|confirm[-_]?email)&#x27;, re.I)
+SUBMIT_RX = re.compile(r&#x27;(/submit|/apply\b|/applications?\b|/candidates?\b|/postapply|/jobs?/[^/]+/apply)&#x27;, re.I)
+ACTIONS_LIVE_ONLY = {&#x27;create_account&#x27;, &#x27;reset_password&#x27;, &#x27;verification&#x27;, &#x27;security_code&#x27;, &#x27;submit&#x27;}
+ACTIONS_AUTH_OK = {&#x27;signin&#x27;}
+
+
+class DryRunBoundary(RuntimeError):
+    &quot;&quot;&quot;Raised when a dry run reaches a state-changing step.&quot;&quot;&quot;
+
+
+def set_mode(dry_run: bool, auth: bool | None = None) -&gt; str:
+    &quot;&quot;&quot;Resolve and pin the mode for this process. auth is only honored
+    together with dry_run; without --dry-run there is no dry-auth.&quot;&quot;&quot;
+    global _MODE
+    if auth is None:
+        auth = os.environ.get(&#x27;SCIPIO_DRY_RUN_AUTH&#x27;) == &#x27;1&#x27;
+    _MODE = &#x27;live&#x27; if not dry_run else (&#x27;dry-auth&#x27; if auth else &#x27;dry&#x27;)
+    _SEEN.clear()
+    return _MODE
+
+
+def mode() -&gt; str:
+    return _MODE
+
+
+def decide(method: str, url: str, current: str | None = None) -&gt; tuple[bool, str]:
+    &quot;&quot;&quot;(allowed, reason) for one request under the mode.&quot;&quot;&quot;
+    m = (current or _MODE)
+    if m == &#x27;live&#x27;:
+        return True, &#x27;live&#x27;
+    method = (method or &#x27;GET&#x27;).upper()
+    path = urlsplit(url or &#x27;&#x27;).path + &#x27;?&#x27; + (urlsplit(url or &#x27;&#x27;).query or &#x27;&#x27;)
+    if ACCOUNT_RX.search(path):
+        return False, &#x27;account state change&#x27;
+    if SUBMIT_RX.search(path) and method not in SAFE_METHODS:
+        return False, &#x27;submission&#x27;
+    if SIGNIN_RX.search(path) and m == &#x27;dry&#x27;:
+        return False, &#x27;sign-in&#x27;
+    if method not in SAFE_METHODS:
+        if m == &#x27;dry-auth&#x27; and SIGNIN_RX.search(path):
+            return True, &#x27;dry-auth sign-in&#x27;
+        if m == &#x27;dry-auth&#x27; and not SIGNIN_RX.search(path) and not SUBMIT_RX.search(path) and not ACCOUNT_RX.search(path):
+            # an authenticated walk needs the ATS&#x27;s own page-render calls
+            return True, &#x27;dry-auth page traffic&#x27;
+        return False, f&#x27;{method} in a dry run&#x27;
+    return True, &#x27;read&#x27;
+
+
+def guard(action: str, what: str = &#x27;&#x27;) -&gt; None:
+    &quot;&quot;&quot;Raise unless the mode allows this action. Call BEFORE the step.&quot;&quot;&quot;
+    if _MODE == &#x27;live&#x27;:
+        return
+    if action in ACTIONS_AUTH_OK and _MODE == &#x27;dry-auth&#x27;:
+        return
+    raise DryRunBoundary(f&#x27;dry run ({_MODE}): refusing {action}&#x27; + (f&#x27; — {what}&#x27; if what else &#x27;&#x27;))
+
+
+async def _route(route):
+    req = route.request
+    ok, why = decide(req.method, req.url)
+    if ok:
+        await route.continue_()
+        return
+    key = (req.method, urlsplit(req.url).netloc + urlsplit(req.url).path)
+    if key not in _SEEN:
+        _SEEN.add(key)
+        print(f&#x27;  [dry] blocked {req.method} {req.url[:100]} ({why})&#x27;)
+    await route.abort(&#x27;blockedbyclient&#x27;)
+
+
+async def install(context) -&gt; bool:
+    &quot;&quot;&quot;Arm the request guard on a Playwright BrowserContext (launched,
+    persistent or CDP-attached alike). No-op when live. Returns whether
+    the guard is armed.&quot;&quot;&quot;
+    if _MODE == &#x27;live&#x27;:
+        return False
+    await context.route(&#x27;**/*&#x27;, _route)
+    print(f&#x27;  [dry] boundary armed ({_MODE}): no sign-in, account, reset, verification or submit requests leave this browser&#x27;)
+    return True
+```
+### Remaining paths that can reach a live employer account
+- Live mode (no --dry-run): everything, by design.
+- `--dry-run --auth`: sign-in POST to an existing account only; create/reset/verification/submit still blocked at the request layer.
+- Non-browser outbound: mailer.py (SMTP, has its own dry_run), captcha.py (2captcha API, called only when not dry_run and the browser guard still blocks the submit), scout/jd_extract/aggregators (GET job boards), state_lock (git), text_bridge (iMessage).
+- dia_pdf.py / tailor.py open a browser only to render local HTML to PDF.
+- The URL-pattern lists (SIGNIN_RX / ACCOUNT_RX / SUBMIT_RX) are heuristics for GETs; the hard rule is that no non-GET request leaves the browser in dry mode.
+</pre></body></html>
